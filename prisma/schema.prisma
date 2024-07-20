@@ -1,0 +1,93 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email      String       @unique @db.VarChar()
+  password   String       @db.VarChar()
+  Snippet    Snippet[]
+  Tag        Tag[]
+  SnippetBin SnippetBin[]
+}
+
+model Snippet {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String     @db.VarChar()
+  description String?    @db.VarChar()
+  code        String     @db.VarChar()
+  codePreview String?    @db.VarChar()
+  language    Language
+  visibility  Visibility @default(PRIVATE)
+  createdAt   DateTime   @default(now()) @db.Timestamp()
+  updatedAt   DateTime   @updatedAt @db.Timestamp()
+  createdBy   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String     @db.Uuid
+  tags        Tag[]
+}
+
+model SnippetBin {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  snippetId   String     @db.Uuid
+  title       String     @db.VarChar()
+  description String?    @db.VarChar()
+  code        String     @db.VarChar()
+  codePreview String?    @db.VarChar()
+  language    Language
+  visibility  Visibility @default(PRIVATE)
+  createdAt   DateTime   @db.Timestamp()
+  deletedAt   DateTime   @default(now()) @db.Timestamp()
+  createdBy   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String     @db.Uuid
+  tags        Tag[]
+}
+
+model Tag {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String       @db.VarChar()
+  snippets    Snippet[]
+  createdBy   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String       @db.Uuid
+  binSnippets SnippetBin[]
+}
+
+enum Language {
+  JAVASCRIPT
+  PYTHON
+  JAVA
+  CSHARP
+  RUBY
+  GO
+  PHP
+  SWIFT
+  TYPESCRIPT
+  KOTLIN
+  SCALA
+  RUST
+  PERL
+  HTML
+  CSS
+  SQL
+  BASH
+  R
+  OBJECTIVEC
+  C
+  CPP
+  LUA
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
