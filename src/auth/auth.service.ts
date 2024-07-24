@@ -29,6 +29,7 @@ export class AuthService {
       });
       this.logger.log(`User with email : ${user.email} logged in successfully`);
       return {
+        ...payload,
         accessToken,
       };
     } catch (error) {

@@ -1,8 +1,13 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateSnippetDto, UpdateSnippetDto } from './dto/snippet.dto';
 import { User } from 'types';
-import { Prisma } from '@prisma/client';
+import { Prisma, Visibility } from '@prisma/client';
 import { GetAllQGetAllQueryParamsDto } from 'src/common/queryParams';
 
 @Injectable()
@@ -26,6 +31,7 @@ export class SnippetService {
     codePreview: true,
     createdAt: true,
     updatedAt: true,
+    userId: true,
   };
 
   private gellAllSelectArgs: Prisma.SnippetSelect = {
@@ -108,9 +114,20 @@ export class SnippetService {
           codePreview,
           language: dto.language,
           visibility: dto.visibility,
-          tags: {
-            connect: dto.tagIds.map((id) => ({ id })),
-          },
+          ...(dto.tagIds && dto.tagIds.length > 0
+            ? {
+                tags: {
+                  connect: dto.tagIds.map((id) => ({ id })),
+                },
+              }
+            : {}),
+          ...(dto.allowedUsersIds && dto.allowedUsersIds.length > 0
+            ? {
+                allowedUsers: {
+                  connect: dto.allowedUsersIds.map((id) => ({ id })),
+                },
+              }
+            : {}),
           createdBy: {
             connect: {
               id: user.id,
@@ -134,14 +151,14 @@ export class SnippetService {
         await this.validateTagIds(dto.tagIds, user.id);
       }
 
-      const snippet = await this.getSnippetById(id, user);
+      const snippet = await this.getSnippetByIdInternal(id, user);
 
       let codePreview = snippet.codePreview;
       if (dto.code !== undefined) {
         codePreview = dto.code === '' ? '' : this.generateCodePreview(dto.code);
       }
 
-      const { tagIds, ...updateData } = dto;
+      const { tagIds, allowedUsersIds, ...updateData } = dto;
 
       const updatedSnippet = await this.prisma.snippet.update({
         where: {
@@ -153,10 +170,17 @@ export class SnippetService {
         data: {
           ...updateData,
           codePreview,
-          ...(tagIds
+          ...(tagIds && tagIds.length > 0
             ? {
                 tags: {
                   set: tagIds.map((id) => ({ id })),
+                },
+              }
+            : {}),
+          ...(allowedUsersIds && allowedUsersIds.length > 0
+            ? {
+                allowedUsers: {
+                  set: allowedUsersIds.map((id) => ({ id })),
                 },
               }
             : {}),
@@ -172,7 +196,7 @@ export class SnippetService {
     }
   }
 
-  async getSnippetById(id: string, user: User) {
+  async getSnippetByIdInternal(id: string, user: User) {
     try {
       const snippet = await this.prisma.snippet.findFirst({
         where: {
@@ -197,9 +221,52 @@ export class SnippetService {
     }
   }
 
+  async getSnippetById(id: string, user: User) {
+    try {
+      const snippet = await this.prisma.snippet.findFirst({
+        where: {
+          id,
+        },
+        include: {
+          tags: {
+            select: {
+              id: true,
+            },
+          },
+          allowedUsers: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (!snippet) {
+        this.logger.error(`Snippet with id : ${id} not found `);
+        throw new NotFoundException(`Snippet with id : ${id} not found `);
+      }
+
+      const isUserAllowed =
+        snippet.visibility === Visibility.PUBLIC ||
+        snippet.userId === user.id ||
+        snippet.allowedUsers.some((allowedUser) => allowedUser.id === user.id);
+
+      if (isUserAllowed) {
+        this.logger.log(
+          `Snippet with id: ${snippet.id} retrieved suceessfully`,
+        );
+        return snippet;
+      } else {
+        throw new ForbiddenException('You do not have access to this snippet');
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async deleteSnippet(id: string, user: User) {
     try {
-      const snippet = await this.getSnippetById(id, user);
+      const snippet = await this.getSnippetByIdInternal(id, user);
 
       const isDeleted = await this.prisma.$transaction(async (prisma) => {
         await prisma.snippetBin.create({

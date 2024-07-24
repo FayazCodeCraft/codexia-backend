@@ -27,6 +27,14 @@ export class CreateSnippetDto {
     message: 'Each tagId must be a valid UUID',
   })
   tagIds: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', {
+    each: true,
+    message: 'Each userId must be a valid UUID',
+  })
+  allowedUsersIds: string[];
 }
 
 export class UpdateSnippetDto extends PartialType(CreateSnippetDto) {}
